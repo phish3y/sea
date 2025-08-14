@@ -2,13 +2,14 @@
 
 
 ### Setup
-1. Install Vulkan
+1. Install tools
 ```bash
-sudo apt install vulkan-validationlayers-dev libvulkan-dev
+sudo apt install -y astyle ninja-build
 ```
 
 2. Install Dependencies
 ```bash
-make volk
+sudo apt install -y libvulkan-dev
+make deps
 ```
  

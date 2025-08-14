@@ -1,6 +1,8 @@
 #pragma once
-#include <vulkan/vulkan.h>
+
+#define VK_NO_PROTOTYPES
 #include <stdbool.h>
+#include <volk.h>
 
 typedef struct {
     VkInstance instance;
@@ -10,5 +12,6 @@ typedef struct {
     uint32_t graphics_queue_family;
 } Vk;
 
-bool vk_init(Vk* r);
-void vk_cleanup(Vk* r);
+bool vk_init(Vk* v);
+void vk_cleanup(Vk* v);
+bool triangle(const Vk* v, uint32_t w, uint32_t h);
