@@ -281,10 +281,25 @@ bool triangle(const Vk* v, uint32_t w, uint32_t h)
         return false;
     }
 
-    
-
     // -----
 
+    VkImageViewCreateInfo view_ci = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = color_img,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0, .levelCount = 1,
+            .baseArrayLayer = 0, .layerCount = 1
+        }
+    };
+    VkImageView color_view;
+
+    if (vkCreateImageView(v->device, &view_ci, NULL, &color_view) != VK_SUCCESS) {
+        fprintf(stderr, "failed to create image view\n");
+        return false;
+    }
 
     return true;
 }
