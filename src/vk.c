@@ -5,6 +5,8 @@
 #include <volk.h>
 
 static void gpu_info(const Vk* v);
+static bool find_memory_type(VkPhysicalDevice pd, uint32_t type_bits, VkMemoryPropertyFlags props, uint32_t* memory_type);
+static bool load_spirv(VkDevice device, const char* path, VkShaderModule* mod);
 
 bool vk_init(Vk* v)
 {
@@ -197,6 +199,42 @@ static bool find_memory_type(
     return false;
 }
 
+static bool load_spirv(VkDevice device, const char* path, VkShaderModule* mod)
+{
+    FILE* f = fopen(path, "rb");
+    if (!f) { 
+        fprintf(stderr, "failed to open path: %s\n", path);
+        return false; 
+    }
+
+    fseek(f, 0, SEEK_END);
+    long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    uint32_t* buf = malloc(len);
+    if (fread(buf, 1, len, f) != (size_t)len) { 
+        fprintf(stderr, "failed to read from path: %s\n", path);
+        fclose(f); 
+        free(buf); 
+        return false;
+    }
+    fclose(f);
+
+    VkShaderModuleCreateInfo ci = { 
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = (size_t)len,
+        .pCode = buf 
+    };
+    if (vkCreateShaderModule(device, &ci, NULL, &mod) != VK_SUCCESS) {
+        fprintf(stderr, "failed to create shader module: %s\n", path);
+        free(buf);
+        return false;
+    }
+    free(buf);
+    
+    return true;
+}
+
 bool triangle(const Vk* v, uint32_t w, uint32_t h)
 {
     // Command Pool
@@ -283,6 +321,7 @@ bool triangle(const Vk* v, uint32_t w, uint32_t h)
 
     // -----
 
+    // Image view
     VkImageViewCreateInfo view_ci = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = color_img,
@@ -300,6 +339,129 @@ bool triangle(const Vk* v, uint32_t w, uint32_t h)
         fprintf(stderr, "failed to create image view\n");
         return false;
     }
+
+    // -----
+
+    // Render pass
+    VkAttachmentDescription color_att = {
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
+    };
+
+    VkAttachmentReference color_ref = {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+    VkSubpassDescription subpass = {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_ref
+    };
+
+    VkSubpassDependency dep = {
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    };
+
+    VkRenderPassCreateInfo rp_ci = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &color_att,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+        .dependencyCount = 1,
+        .pDependencies = &dep
+    };
+    VkRenderPass render_pass;
+
+    vkCreateRenderPass(v->device, &rp_ci, NULL, &render_pass);
+
+    // -----
+
+    // Framebuffer
+    VkFramebufferCreateInfo fb_ci = { 
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = render_pass,
+        .attachmentCount = 1,
+        .pAttachments = &color_view,
+        .width = w,
+        .height = h,
+        .layers = 1 
+    };
+    VkFramebuffer fb;
+    vkCreateFramebuffer(v->device, &fb_ci, NULL, &fb);
+
+    // -----
+
+    // Pipeline
+    VkShaderModule vs;
+    if (!load_spirv(v->device, "", &vs)) {
+
+    }
+    VkShaderModule fs;
+    if (!load_spirv(v->device, "", &fs)) {
+
+    }
+    
+    // VkPipelineShaderStageCreateInfo stages[2] = {
+    //     { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+    //       .stage = VK_SHADER_STAGE_VERTEX_BIT,
+    //       .module = vs,
+    //       .pName = "main" },
+    //     { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+    //       .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+    //       .module = fs,
+    //       .pName = "main" }
+    // };
+
+    // VkPipelineVertexInputStateCreateInfo vi = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
+    // VkPipelineInputAssemblyStateCreateInfo ia = { .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+    //                                               .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST };
+    // VkViewport vp = { 0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f };
+    // VkRect2D scissor = { {0,0}, {width, height} };
+    // VkPipelineViewportStateCreateInfo vp_state = { .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+    //                                               .viewportCount = 1, .pViewports = &vp,
+    //                                               .scissorCount = 1, .pScissors = &scissor };
+    // VkPipelineRasterizationStateCreateInfo rs = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+    //                                               .polygonMode = VK_POLYGON_MODE_FILL,
+    //                                               .cullMode = VK_CULL_MODE_BACK_BIT,
+    //                                               .frontFace = VK_FRONT_FACE_CLOCKWISE,
+    //                                               .lineWidth = 1.0f };
+    // VkPipelineMultisampleStateCreateInfo ms = { .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+    //                                            .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT };
+    // VkPipelineColorBlendAttachmentState cb_att = { .colorWriteMask = 0xF,
+    //                                                .blendEnable = VK_FALSE };
+    // VkPipelineColorBlendStateCreateInfo cb = { .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+    //                                            .attachmentCount = 1,
+    //                                            .pAttachments = &cb_att };
+    // VkPipelineLayoutCreateInfo pl_ci = { .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+    // VkPipelineLayout pipeline_layout;
+    // vkCreatePipelineLayout(device, &pl_ci, NULL, &pipeline_layout);
+
+    // VkGraphicsPipelineCreateInfo gp_ci = { .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+    //                                        .stageCount = 2,
+    //                                        .pStages = stages,
+    //                                        .pVertexInputState = &vi,
+    //                                        .pInputAssemblyState = &ia,
+    //                                        .pViewportState = &vp_state,
+    //                                        .pRasterizationState = &rs,
+    //                                        .pMultisampleState = &ms,
+    //                                        .pColorBlendState = &cb,
+    //                                        .layout = pipeline_layout,
+    //                                        .renderPass = render_pass,
+    //                                        .subpass = 0 };
+    // VkPipeline pipeline;
+    // vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &gp_ci, NULL, &pipeline);
 
     return true;
 }

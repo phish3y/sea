@@ -12,6 +12,11 @@ stb:
 .PHONY: deps
 deps: volk stb
 
+.PHONY: shaders
+shaders:
+	glslc shaders/triangle.vert -o shaders/triangle.vert.spv
+	glslc shaders/triangle.frag -o shaders/triangle.frag.spv	
+
 .PHONY: build
 build:
 	mkdir -p build && cd build && cmake .. -G Ninja && ninja
