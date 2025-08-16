@@ -225,7 +225,7 @@ static bool load_spirv(VkDevice device, const char* path, VkShaderModule* mod)
         .codeSize = (size_t)len,
         .pCode = buf 
     };
-    if (vkCreateShaderModule(device, &ci, NULL, &mod) != VK_SUCCESS) {
+    if (vkCreateShaderModule(device, &ci, NULL, mod) != VK_SUCCESS) {
         fprintf(stderr, "failed to create shader module: %s\n", path);
         free(buf);
         return false;
@@ -405,12 +405,14 @@ bool triangle(const Vk* v, uint32_t w, uint32_t h)
 
     // Pipeline
     VkShaderModule vs;
-    if (!load_spirv(v->device, "", &vs)) {
-
+    if (!load_spirv(v->device, "shaders/triangle.vert.spv", &vs)) {
+        fprintf(stderr, "failed to load vertex shader\n");
+        return false;
     }
     VkShaderModule fs;
-    if (!load_spirv(v->device, "", &fs)) {
-
+    if (!load_spirv(v->device, "shaders/triangle.frag.spv", &fs)) {
+        fprintf(stderr, "failed to load fragment shader\n");
+        return false;
     }
     
     // VkPipelineShaderStageCreateInfo stages[2] = {
